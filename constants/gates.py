@@ -1,37 +1,19 @@
 import numpy as np
+import scipy.sparse as sp
 
-I = np.array([
-    [1, 0],
-    [0, 1]
-])
+sqrt2_inv = 1 / 2**0.5
+i = 1j
 
-X = np.array([
-    [0, 1],
-    [1, 0]
-])
+I = sp.csr_matrix([[1, 0], [0, 1]], dtype=np.complex128)
 
-Y = np.array([
-    [0, -1j],
-    [1j, 0]
-])
+X = sp.csr_matrix([[0, 1], [1, 0]], dtype=np.complex128)
 
-Z = np.array([
-    [1, 0],
-    [0, -1]
-])
+Y = sp.csr_matrix([[0, -i], [i, 0]], dtype=np.complex128)
 
-H = 1/2**0.5 * np.array([
-    [1, 1],
-    [1, -1]
-])
+Z = sp.csr_matrix([[1, 0], [0, -1]], dtype=np.complex128)
 
-S = np.array([
-    [1, 0],
-    [0, 1j]
-])
+H = sp.csr_matrix(sqrt2_inv * np.array([[1, 1], [1, -1]], dtype=np.complex128))
 
-T = np.array([
-    [1, 0],
-    [0, np.exp(1j * np.pi / 4)]
-])
+S = sp.csr_matrix([[1, 0], [0, i]], dtype=np.complex128)
 
+T = sp.csr_matrix([[1, 0], [0, np.exp(i * np.pi / 4)]], dtype=np.complex128)
