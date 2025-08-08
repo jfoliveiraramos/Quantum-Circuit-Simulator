@@ -35,5 +35,6 @@ class Sampler:
         results = [frame_result(result) for result in self._results]
         
         _ = plt.hist(results) # pyright: ignore[reportUnknownMemberType]
+        _ = plt.xticks(rotation=45) # pyright: ignore[reportUnknownMemberType]
         plt.show() # pyright: ignore[reportUnknownMemberType]
 
