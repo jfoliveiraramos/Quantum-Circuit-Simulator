@@ -28,12 +28,13 @@ class Sampler:
  
         return self
 
-    def show(self, frame_result: Callable[[NDArray[np.int64]],Any]): # pyright: ignore[reportExplicitAny]
+    def show(self, frame_result: Callable[[NDArray[np.int64]],Any], title: str): # pyright: ignore[reportExplicitAny]
         if self._results is None:
             raise ValueError("Sampler has no results to show.") 
 
         results = [frame_result(result) for result in self._results]
         
+        _ = plt.title(title) # pyright: ignore[reportUnknownMemberType]
         _ = plt.hist(results) # pyright: ignore[reportUnknownMemberType]
         _ = plt.xticks(rotation=45) # pyright: ignore[reportUnknownMemberType]
         plt.show() # pyright: ignore[reportUnknownMemberType]

@@ -22,7 +22,8 @@ def main():
         )],
         samples=30
     ).show(
-        lambda bits: ''.join(str(bit) for bit in bits[:dim]) # pyright: ignore[reportAny]
+        lambda bits: ''.join(str(bit) for bit in bits[:dim]), # pyright: ignore[reportAny]
+    "Quantum Fourier Transform of |00000⟩"
     )
 
     sampler.sample(
@@ -34,7 +35,8 @@ def main():
         )],
         samples=30
     ).show(
-        lambda bits: ''.join(str(bit) for bit in bits[:dim]) # pyright: ignore[reportAny]
+        lambda bits: ''.join(str(bit) for bit in bits[:dim]), # pyright: ignore[reportAny]
+    r"Quantum Fourier Transform and Inverse on |00000⟩"
     )
 
 
