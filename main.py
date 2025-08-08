@@ -3,6 +3,7 @@ from circuit.measurement import MeasurementBasis
 from constants import gates
 from circuit.circuit import Circuit
 from circuit.operations import ControlledOp, MeasurementOp, SingleQubitOp, ClassicallyControlledOp
+from sampler.sampler import Sampler
 
 
 def main():
@@ -10,8 +11,9 @@ def main():
     circuit = Circuit(dim)
     state= np.zeros(2**dim, dtype=np.complex128)
     state[0] = 1 / 2**0.5
-    state[1] = 1 / 2**0.5
-    final_state = circuit.run(
+    state[1] = -1 / 2**0.5
+    sampler = Sampler(circuit)
+    sampler.sample(
         state,
         [
             SingleQubitOp(gates.H, 2),
@@ -33,10 +35,10 @@ def main():
                 read_target=np.array([2]),
                 write_target=np.array([0]),
             ),
-        ],
+        ],100
+    ).show(
+        lambda bits: str(bits[0]) # pyright: ignore[reportAny]
     )
-    print(final_state.toarray())
-    print(circuit.bits[0])
 
 
 if __name__ == "__main__":

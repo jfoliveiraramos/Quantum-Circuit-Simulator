@@ -17,7 +17,7 @@ class Circuit:
         self._dim = qubits
         self._endianness = endianness
         self._gate_builder = GateBuilder(qubits)
-        self._bits = np.zeros(bits) if bits else np.zeros(100)
+        self._bits = np.zeros(bits, dtype=np.int64) if bits else np.zeros(100, dtype=np.int64)
 
     @property
     def dim(self) -> int:
@@ -28,7 +28,7 @@ class Circuit:
         return self._endianness
 
     @property
-    def bits(self) -> NDArray[np.float64]:
+    def bits(self) -> NDArray[np.int64]:
         return self._bits
 
     def sanitise_state(self, state: InputVector) -> State:
@@ -46,11 +46,6 @@ class Circuit:
             raise ValueError(
                 f"Unrecognized"
             )
-
-        # if sanitised_state.shape != (2**self.dim, 1):
-        #     raise ValueError(
-        #         f"Bad input state. Expected shape ({2**self.dim}, 1), got {state.shape}"
-        #     )
 
         norm = sanitised_state.multiply(sanitised_state.conj()).sum()
         if not np.isclose(norm, 1.0, atol=1e-12):
@@ -98,6 +93,8 @@ class Circuit:
 
                 case MeasurementOp(basis=b, read_target=rt, write_target=wt):
                     for read, write in zip(rt, wt): # pyright: ignore[reportAny]
+                        read: int
+                        write: int
                         projectors = self._gate_builder.build_projectors(b.unit_vectors, read)
                         probabilities_list: list[float] = []
                         projected_states: list[State] = []
