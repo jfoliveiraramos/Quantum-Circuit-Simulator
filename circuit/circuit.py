@@ -1,88 +1,121 @@
-from dataclasses import dataclass
 from typing import final
 import numpy as np
+from numpy.typing import NDArray
 import scipy.sparse as sp
-from circuit.gates import Gate, GateBuilder
-
-
-@dataclass
-class SingleQubitOp:
-    gate: Gate
-    qubit: int
-
-
-@dataclass
-class ControlledOp:
-    gate: Gate
-    ctrl: int
-    target: int
-
-
-GateOp = SingleQubitOp | ControlledOp
-
-InputState = list[int] | np.ndarray | sp.csr_matrix
-
-State = sp.csr_matrix
+from circuit.gates import GateBuilder
+from circuit.operations import CircuitOp, ClassicallyControlledOp, ControlledOp, MeasurementOp, SingleQubitOp
+from circuit.typing import InputVector, State
 
 
 @final
 class Circuit:
-    def __init__(self, dim: int, endianness: str = "little"):
+
+    def __init__(self, qubits: int, bits: int | None = None, endianness: str = "little"):
         if endianness not in ("little", "big"):
             raise ValueError("qubit_order must be 'little' or 'big'")
 
-        self._dim = dim
-        self.endianness = endianness
-        self._gate_builder = GateBuilder(dim)
+        self._dim = qubits
+        self._endianness = endianness
+        self._gate_builder = GateBuilder(qubits)
+        self._bits = np.zeros(bits) if bits else np.zeros(100)
 
     @property
     def dim(self) -> int:
         return self._dim
 
-    def sanitise_state(self, state: InputState) -> State:
-        if isinstance(state, list):
-            state = np.array(state, dtype=np.complex128)
-        if isinstance(state, np.ndarray):
-            if state.ndim == 1:
-                state = state[:, np.newaxis]  # reshape to (n, 1)
-            state = sp.csr_matrix(state, dtype=np.complex128)
+    @property
+    def endianness(self) -> str:
+        return self._endianness
 
-        if state.shape != (2**self.dim, 1):
+    @property
+    def bits(self) -> NDArray[np.float64]:
+        return self._bits
+
+    def sanitise_state(self, state: InputVector) -> State:
+        if isinstance(state, list):
+            arr = np.array(state, dtype=np.complex128)
+            if arr.ndim == 1:
+                arr = arr.reshape(-1, 1)  # column vector
+            sanitised_state = sp.csr_matrix(arr)
+        elif isinstance(state, np.ndarray):
+            arr = state.astype(np.complex128)
+            if arr.ndim == 1:
+                arr = arr.reshape(-1, 1)  # column vector
+            sanitised_state = sp.csr_matrix(arr)
+        else:
             raise ValueError(
-                f"Bad input state. Expected shape ({2**self.dim}, 1), got {state.shape}"
+                f"Unrecognized"
             )
 
-        norm = state.multiply(state.conj()).sum()
+        # if sanitised_state.shape != (2**self.dim, 1):
+        #     raise ValueError(
+        #         f"Bad input state. Expected shape ({2**self.dim}, 1), got {state.shape}"
+        #     )
+
+        norm = sanitised_state.multiply(sanitised_state.conj()).sum()
         if not np.isclose(norm, 1.0, atol=1e-12):
             raise ValueError(f"State is not normalised: ||ψ||² = {norm}")
 
-        return state
+        return sanitised_state
 
-    def translate_indexing(self, gate_ops: list[GateOp]):
+    def translate_indexing(self, operations: list[CircuitOp]):
         if self.endianness == "big":
-            return gate_ops
+            return operations
 
-        translated_ops: list[GateOp] = []
-        for gate_op in gate_ops:
-            match gate_op:
+        translated_ops: list[CircuitOp] = []
+        for op in operations:
+            match op:
                 case SingleQubitOp(gate, qubit):
-                    translated_ops.append(SingleQubitOp(gate, self.dim - qubit - 1))
+                    translated_ops.append(
+                        SingleQubitOp(gate, self.dim - qubit - 1)
+                    )
                 case ControlledOp(gate, ctrl, target):
                     translated_ops.append(
                         ControlledOp(gate, self.dim - ctrl - 1, self.dim - target - 1)
                     )
+                case MeasurementOp(basis=b, read_target=rt, write_target=wt):
+                    translated_ops.append(
+                        MeasurementOp(basis=b, read_target=self.dim - rt - 1, write_target=wt)
+                    )
+                case ClassicallyControlledOp(gate, ctrl, target):
+                    translated_ops.append(
+                        ClassicallyControlledOp(gate, ctrl, self.dim - target - 1)
+                    )
         return translated_ops
 
-    def run(self, input_state: InputState, gate_ops: list[GateOp]) -> State:
+    def run(self, input_state: InputVector, operations: list[CircuitOp]) -> State:
         state = self.sanitise_state(input_state)
 
-        for gate_op in gate_ops:
-            match gate_op:
+        for op in self.translate_indexing(operations):
+            match op:
                 case SingleQubitOp(gate, qubit):
                     matrix = self._gate_builder.build(gate, qubit)
+                    state = matrix @ state
+
                 case ControlledOp(gate, ctrl, target):
                     matrix = self._gate_builder.build_ctrl(gate, ctrl, target)
+                    state = matrix @ state
 
-            state: State = matrix @ state
+                case MeasurementOp(basis=b, read_target=rt, write_target=wt):
+                    for read, write in zip(rt, wt): # pyright: ignore[reportAny]
+                        projectors = self._gate_builder.build_projectors(b.unit_vectors, read)
+                        probabilities_list: list[float] = []
+                        projected_states: list[State] = []
+                        
+                        for P in projectors:
+                            proj_state = P @ state
+                            prob: float = np.real(proj_state.T.conj() @ proj_state).toarray()[0,0]  # pyright: ignore[reportAny]
+                            probabilities_list.append(prob)
+                            projected_states.append(proj_state)
+                        
+                        probabilities: NDArray[np.float64] = np.array(probabilities_list)
+                        outcome = int(np.random.choice([0,1], p=probabilities)) # pyright: ignore[reportAny]
+                        state = projected_states[outcome] / np.sqrt(probabilities[outcome]) # pyright: ignore[reportAny]
+                        self.bits[write] = outcome
+
+                case ClassicallyControlledOp(gate, ctrl, target):
+                    if self.bits[ctrl] != 0:
+                        matrix = self._gate_builder.build(gate, target)
+                        state = matrix @ state
 
         return state
